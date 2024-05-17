@@ -20,25 +20,31 @@ function formatTime(seconds) {
 
 // Função para obter links de um site
 async function getLinks(baseUrl) {
-  const { data } = await retry(async bail => {
-    const response = await axios.get(baseUrl);
-    if (response.status === 404 || response.status.toString().startsWith('5')) bail(new Error('Failed to fetch page'));
-    return response;
-  }, {
-    retries: 5,
-  });
+  const { data } = await retry(
+    async (bail) => {
+      const response = await axios.get(baseUrl);
+      if (response.status === 404 || response.status.toString().startsWith('5'))
+        bail(new Error('Failed to fetch page'));
+      return response;
+    },
+    {
+      retries: 5,
+    }
+  );
 
   const $ = cheerio.load(data);
   const linkElements = $('a').toArray();
 
   // Para cada link encontrado, se terminar com '.zip', adicione à lista de links coletados
-  await Promise.all(linkElements.map(async (element) => {
-    const link = $(element).attr('href');
-    const fullUrl = url.resolve(baseUrl, link);
-    if (fullUrl.endsWith('.zip')) {
-      collectedLinks.push(fullUrl);
-    }
-  }));
+  await Promise.all(
+    linkElements.map(async (element) => {
+      const link = $(element).attr('href');
+      const fullUrl = url.resolve(baseUrl, link);
+      if (fullUrl.endsWith('.zip')) {
+        collectedLinks.push(fullUrl);
+      }
+    })
+  );
 
   return collectedLinks;
 }
@@ -56,16 +62,17 @@ async function downloadFile(fileUrl, outputLocationPath) {
   let downloadedLength = 0;
 
   const progressBar = new cliProgress.SingleBar({
-    format: 'Downloading |' + '{bar}' + '| {percentage}% || ETA: {eta_formatted}',
+    format:
+      'Downloading |' + '{bar}' + '| {percentage}% || ETA: {eta_formatted}',
     barCompleteChar: '=',
     barIncompleteChar: ' ',
-    hideCursor: true
+    hideCursor: true,
   });
 
   const startTime = process.uptime();
 
   progressBar.start(100, 0, {
-    eta_formatted: "calculando..."
+    eta_formatted: 'calculando...',
   });
 
   // Atualiza a barra de progresso a cada pedaço de dados recebido
@@ -75,8 +82,8 @@ async function downloadFile(fileUrl, outputLocationPath) {
     const speed = downloadedLength / (process.uptime() - startTime); // bytes per second
     const eta = Math.round(remainingLength / speed); // estimated time remaining in seconds
 
-    progressBar.update(downloadedLength / totalLength * 100, {
-      eta_formatted: formatTime(eta)
+    progressBar.update((downloadedLength / totalLength) * 100, {
+      eta_formatted: formatTime(eta),
     });
   });
 
@@ -100,20 +107,21 @@ async function unzipFile(inputPath, outputPath) {
     console.log(`Extracted ${inputPath} to ${absoluteOutputPath}`);
 
     // Renomeia os arquivos para adicionar a extensão .csv
-    fs.readdirSync(absoluteOutputPath).forEach(file => {
+    fs.readdirSync(absoluteOutputPath).forEach((file) => {
       const oldPath = path.join(absoluteOutputPath, file);
       const newPath = path.join(absoluteOutputPath, file + '.csv');
       fs.renameSync(oldPath, newPath);
     });
-
   } catch (err) {
     console.error(`Error extracting ${inputPath}: ${err}`);
   }
 }
 
 // Cria os diretórios necessários antes de iniciar o processo de download e extração
-if (!fs.existsSync('./arquivos-zip')) fs.mkdirSync('./arquivos-zip', { recursive: true });
-if (!fs.existsSync('./arquivos-csv')) fs.mkdirSync('./arquivos-csv', { recursive: true });
+if (!fs.existsSync('./arquivos-zip'))
+  fs.mkdirSync('./arquivos-zip', { recursive: true });
+if (!fs.existsSync('./arquivos-csv'))
+  fs.mkdirSync('./arquivos-csv', { recursive: true });
 
 // Inicia o processo de obtenção de links, download e extração
 getLinks(baseURL)
@@ -131,4 +139,4 @@ getLinks(baseURL)
     }
   })
   .then(() => console.log('All files downloaded and extracted successfully.'))
-  .catch((err) => console.log(err))
+  .catch((err) => console.log(err));
