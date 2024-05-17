@@ -18,6 +18,7 @@ function formatTime(seconds) {
   return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
+// Função para obter links de um site
 async function getLinks(baseUrl) {
   const { data } = await retry(async bail => {
     const response = await axios.get(baseUrl);
@@ -30,6 +31,7 @@ async function getLinks(baseUrl) {
   const $ = cheerio.load(data);
   const linkElements = $('a').toArray();
 
+  // Para cada link encontrado, se terminar com '.zip', adicione à lista de links coletados
   await Promise.all(linkElements.map(async (element) => {
     const link = $(element).attr('href');
     const fullUrl = url.resolve(baseUrl, link);
@@ -41,6 +43,7 @@ async function getLinks(baseUrl) {
   return collectedLinks;
 }
 
+// Função para baixar um arquivo
 async function downloadFile(fileUrl, outputLocationPath) {
   const writer = fs.createWriteStream(outputLocationPath);
   const response = await axios({
@@ -59,12 +62,13 @@ async function downloadFile(fileUrl, outputLocationPath) {
     hideCursor: true
   });
 
+  const startTime = process.uptime();
+
   progressBar.start(100, 0, {
     eta_formatted: "calculando..."
   });
 
-  const startTime = process.uptime();
-
+  // Atualiza a barra de progresso a cada pedaço de dados recebido
   response.data.on('data', (chunk) => {
     downloadedLength += chunk.length;
     const remainingLength = totalLength - downloadedLength;
@@ -87,12 +91,15 @@ async function downloadFile(fileUrl, outputLocationPath) {
   });
 }
 
+// Função para descompactar um arquivo
 async function unzipFile(inputPath, outputPath) {
   try {
     const absoluteOutputPath = path.resolve(outputPath);
+
     await extract(inputPath, { dir: absoluteOutputPath });
     console.log(`Extracted ${inputPath} to ${absoluteOutputPath}`);
 
+    // Renomeia os arquivos para adicionar a extensão .csv
     fs.readdirSync(absoluteOutputPath).forEach(file => {
       const oldPath = path.join(absoluteOutputPath, file);
       const newPath = path.join(absoluteOutputPath, file + '.csv');
@@ -104,10 +111,14 @@ async function unzipFile(inputPath, outputPath) {
   }
 }
 
+// Cria os diretórios necessários antes de iniciar o processo de download e extração
+if (!fs.existsSync('./arquivos-zip')) fs.mkdirSync('./arquivos-zip', { recursive: true });
+if (!fs.existsSync('./arquivos-csv')) fs.mkdirSync('./arquivos-csv', { recursive: true });
+
+// Inicia o processo de obtenção de links, download e extração
 getLinks(baseURL)
   .then(() => getLinks(baseURL + 'regime_tributario/'))
   .then(async (links) => {
-    // console.log(links);
     for (const link of links) {
       const fileName = link.split('/').pop();
       const downloadPath = `./arquivos-zip/${fileName}`;
