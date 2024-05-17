@@ -129,5 +129,6 @@ getLinks(baseURL)
       await unzipFile(downloadPath, './arquivos-csv');
       console.log(`Finished extraction of ${fileName}`);
     }
-    console.log('All files downloaded and extracted successfully.');
-  });
+  })
+  .then(() => console.log('All files downloaded and extracted successfully.'))
+  .catch((err) => console.log(err))
