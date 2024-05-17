@@ -11,10 +11,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "ansi-colors": "^4.1.3",
+    "async-retry": "^1.3.3",
     "axios": "^1.6.8",
     "cheerio": "^1.0.0-rc.12",
     "cli-progress": "^3.12.0",
-    "moment": "^2.30.1"
+    "extract-zip": "^2.0.1",
+    "url": "^0.11.3"
   }
 }

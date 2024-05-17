@@ -1,102 +1,122 @@
-const fs = require('fs');
 const path = require('path');
+const fs = require('fs');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const url = require('url');
+const retry = require('async-retry');
 const cliProgress = require('cli-progress');
-const colors = require('ansi-colors');
-const moment = require('moment');
+const extract = require('extract-zip');
 
-const url = 'https://dados.rfb.gov.br/CNPJ/';
-const dirFiles = path.join('./', 'files');
-const lastDownloadFile = path.join(__dirname, 'lastDownload.json');
-const utcBR = 'DD-MM-YYYY HH:mm:ss';
+const baseURL = 'https://dados.rfb.gov.br/CNPJ/';
+const collectedLinks = [];
 
-let lastDownloadData = {
-    date: null,
-    fileName: null
-};
-
-if (fs.existsSync(lastDownloadFile)) {
-    const data = fs.readFileSync(lastDownloadFile, 'utf8');
-    lastDownloadData = {
-        date: moment(data[0], utcBR),
-        fileName: data[1]
-    };
+// Função para formatar o tempo em hh:mm:ss
+function formatTime(seconds) {
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-if (!fs.existsSync(dirFiles)) fs.mkdirSync(dirFiles);
+async function getLinks(baseUrl) {
+  const { data } = await retry(async bail => {
+    const response = await axios.get(baseUrl);
+    if (response.status === 404 || response.status.toString().startsWith('5')) bail(new Error('Failed to fetch page'));
+    return response;
+  }, {
+    retries: 5,
+  });
 
-axios.get(url).then(response => {
-    const fileData = extractFileData(response.data);
+  const $ = cheerio.load(data);
+  const linkElements = $('a').toArray();
 
-    let dadosEmJson = JSON.stringify(fileData, null, 2);
-    fs.writeFile(lastDownloadFile, dadosEmJson, (erro) => {
-        if (erro) throw erro;
-        console.log('Dados salvos com sucesso!');
-    });
+  await Promise.all(linkElements.map(async (element) => {
+    const link = $(element).attr('href');
+    const fullUrl = url.resolve(baseUrl, link);
+    if (fullUrl.endsWith('.zip')) {
+      collectedLinks.push(fullUrl);
+    }
+  }));
 
-    /*fileData.forEach(({ link, lastModified }) => {
-        const fileName = path.basename(link);
-        const filePath = path.join(dirFiles, fileName);
-        const fileLastModifiedDate = moment(lastModified, utcBR);
-
-        if (fileLastModifiedDate.isBefore(lastDownloadData.date)) {
-            console.log(`O arquivo ${fileName} já existe e é a versão mais recente.`);
-            return;
-        }
-
-        const progressBar = new cliProgress.MultiBar({
-            clearOnComplete: true,
-            hideCursor: true,
-            barCompleteChar: '\u2588',
-            barIncompleteChar: '\u2591',
-            format: `${fileName}: |` + colors.cyan('{bar}') + '| {percentage}% || ETA: {eta}ms || Vel.: {speed}',
-        });
-
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-            console.log(`Arquivo ${fileName} removido.`);
-        }
-
-        axios({
-            url: link,
-            responseType: 'stream',
-        }).then(response => {
-            const totalLength = response.headers['content-length'];
-            let downloadedLength = 0;
-            let startTime = Date.now();
-
-            progressBar.create(totalLength, 0, { speed: "N/A" });
-
-            response.data.on('data', (chunk) => {
-                downloadedLength += chunk.length;
-                const elapsedTime = Date.now() - startTime;
-                const speed = ((downloadedLength / elapsedTime) / 1000).toFixed(2) + ' MB/s';
-                progressBar.update(downloadedLength, { speed });
-            });
-
-            response.data.pipe(fs.createWriteStream(`${dirFiles}/${fileName}`))
-                .on('finish', () => {
-                    progressBar.stop();
-                    fs.writeFileSync(lastDownloadFile, `${moment().format(utcBR)}\n${fileName}`);
-                });
-        });
-    });*/
-}).catch(error => console.error(error));
-
-function extractFileData(html) {
-    const $ = cheerio.load(html);
-    const fileData = [];
-    $('table tr').each((index, element) => {
-        if (index > 1) { // Ignora as duas primeiras linhas (cabeçalho e linha horizontal)
-            const columns = $(element).find('td');
-            const linkElement = $(columns[1]).find('a');
-            const link = linkElement.attr('href');
-            const lastModified = $(columns[2]).text().trim();
-            if (link && link.endsWith('.zip')) {
-                fileData.push({ filename: link, link: url + link, lastModified });
-            }
-        }
-    });
-    return fileData;
+  return collectedLinks;
 }
+
+async function downloadFile(fileUrl, outputLocationPath) {
+  const writer = fs.createWriteStream(outputLocationPath);
+  const response = await axios({
+    method: 'get',
+    url: fileUrl,
+    responseType: 'stream',
+  });
+
+  const totalLength = response.headers['content-length'];
+  let downloadedLength = 0;
+
+  const progressBar = new cliProgress.SingleBar({
+    format: 'Downloading |' + '{bar}' + '| {percentage}% || ETA: {eta_formatted}',
+    barCompleteChar: '=',
+    barIncompleteChar: ' ',
+    hideCursor: true
+  });
+
+  progressBar.start(100, 0, {
+    eta_formatted: "calculando..."
+  });
+
+  const startTime = process.uptime();
+
+  response.data.on('data', (chunk) => {
+    downloadedLength += chunk.length;
+    const remainingLength = totalLength - downloadedLength;
+    const speed = downloadedLength / (process.uptime() - startTime); // bytes per second
+    const eta = Math.round(remainingLength / speed); // estimated time remaining in seconds
+
+    progressBar.update(downloadedLength / totalLength * 100, {
+      eta_formatted: formatTime(eta)
+    });
+  });
+
+  response.data.pipe(writer);
+
+  return new Promise((resolve, reject) => {
+    writer.on('finish', () => {
+      progressBar.stop();
+      resolve();
+    });
+    writer.on('error', reject);
+  });
+}
+
+async function unzipFile(inputPath, outputPath) {
+  try {
+    const absoluteOutputPath = path.resolve(outputPath);
+    await extract(inputPath, { dir: absoluteOutputPath });
+    console.log(`Extracted ${inputPath} to ${absoluteOutputPath}`);
+
+    fs.readdirSync(absoluteOutputPath).forEach(file => {
+      const oldPath = path.join(absoluteOutputPath, file);
+      const newPath = path.join(absoluteOutputPath, file + '.csv');
+      fs.renameSync(oldPath, newPath);
+    });
+
+  } catch (err) {
+    console.error(`Error extracting ${inputPath}: ${err}`);
+  }
+}
+
+getLinks(baseURL)
+  .then(() => getLinks(baseURL + 'regime_tributario/'))
+  .then(async (links) => {
+    // console.log(links);
+    for (const link of links) {
+      const fileName = link.split('/').pop();
+      const downloadPath = `./arquivos-zip/${fileName}`;
+      console.log(`Starting download of ${fileName}`);
+      await downloadFile(link, downloadPath);
+      console.log(`Finished download of ${fileName}`);
+      console.log(`Starting extraction of ${fileName}`);
+      await unzipFile(downloadPath, './arquivos-csv');
+      console.log(`Finished extraction of ${fileName}`);
+    }
+    console.log('All files downloaded and extracted successfully.');
+  });
