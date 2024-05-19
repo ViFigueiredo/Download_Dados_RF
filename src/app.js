@@ -6,9 +6,23 @@ const url = require('url');
 const retry = require('async-retry');
 const cliProgress = require('cli-progress');
 const extract = require('extract-zip');
+const knex = require('./services/knex');
 
 const baseURL = 'https://dados.rfb.gov.br/CNPJ/';
 const collectedLinks = [];
+
+// Conexão com Banco da Dados
+async function connectionDB() {
+  return knex.raw('SELECT 1+1 AS result')
+    .then(() => {
+      console.log('Conexão com o banco de dados estabelecida com sucesso.');
+    })
+    .catch((err) => {
+      console.log('Falha ao conectar ao banco de dados\n');
+      console.log(err);
+      return
+    });
+}
 
 // Função para formatar o tempo em hh:mm:ss
 function formatTime(seconds) {
@@ -139,4 +153,5 @@ getLinks(baseURL)
     }
   })
   .then(() => console.log('All files downloaded and extracted successfully.'))
+  .then(() => connectionDB())
   .catch((err) => console.log(err));
