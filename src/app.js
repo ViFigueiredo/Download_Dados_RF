@@ -13,7 +13,6 @@ initDirs()
 getLinks(baseURL)
   .then(() => getLinks(baseURL + 'regime_tributario/'))
   .then(async (links) => {
-    console.log(links);
     const filesToDownload = await askFilesToDownload(links);
     for (const link of filesToDownload) {
       const fileName = link.split('/').pop();
