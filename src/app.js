@@ -7,6 +7,7 @@ const retry = require('async-retry');
 const cliProgress = require('cli-progress');
 const extract = require('extract-zip');
 const knex = require('./services/knex');
+const inquirer = require('inquirer');
 
 const baseURL = 'https://dados.rfb.gov.br/CNPJ/';
 const collectedLinks = [];
@@ -65,6 +66,11 @@ async function getLinks(baseUrl) {
 
 // Função para baixar um arquivo
 async function downloadFile(fileUrl, outputLocationPath) {
+  // Verifica se o arquivo já existe e o exclui antes de baixar novamente
+  if (fs.existsSync(outputLocationPath)) {
+    fs.unlinkSync(outputLocationPath);
+  }
+
   const writer = fs.createWriteStream(outputLocationPath);
   const response = await axios({
     method: 'get',
@@ -117,17 +123,55 @@ async function unzipFile(inputPath, outputPath) {
   try {
     const absoluteOutputPath = path.resolve(outputPath);
 
+    // Verifica se o arquivo já existe e o exclui antes de extrair novamente
+    const files = fs.readdirSync(absoluteOutputPath);
+    files.forEach(file => {
+      if (file === path.basename(inputPath, '.csv')) {
+        fs.unlinkSync(path.join(absoluteOutputPath, file));
+      }
+    });
+
     await extract(inputPath, { dir: absoluteOutputPath });
     console.log(`Extracted ${inputPath} to ${absoluteOutputPath}`);
-
-    // Renomeia os arquivos para adicionar a extensão .csv
-    fs.readdirSync(absoluteOutputPath).forEach((file) => {
-      const oldPath = path.join(absoluteOutputPath, file);
-      const newPath = path.join(absoluteOutputPath, file + '.csv');
-      fs.renameSync(oldPath, newPath);
-    });
   } catch (err) {
     console.error(`Error extracting ${inputPath}: ${err}`);
+  }
+}
+
+// Função para adicionar a extensão .csv aos arquivos
+async function addCSVExtension(directoryPath) {
+  fs.readdirSync(directoryPath).forEach((file) => {
+    if (path.extname(file) !== '.csv') {
+      const oldPath = path.join(directoryPath, file);
+      const newPath = path.join(directoryPath, file + '.csv');
+      fs.renameSync(oldPath, newPath);
+    }
+  });
+}
+
+// Função para selecionar o que baixar
+async function askFilesToDownload(links) {
+  const answers = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'downloadOption',
+      message: 'Quais arquivos você gostaria de baixar?',
+      choices: ['Tudo', 'Selecionar'],
+    },
+  ]);
+
+  if (answers.downloadOption === 'Tudo') {
+    return links;
+  } else {
+    const fileSelectionAnswers = await inquirer.prompt([
+      {
+        type: 'checkbox',
+        name: 'selectedFiles',
+        message: 'Selecione os arquivos que você gostaria de baixar:',
+        choices: links,
+      },
+    ]);
+    return fileSelectionAnswers.selectedFiles;
   }
 }
 
@@ -141,7 +185,8 @@ if (!fs.existsSync('./arquivos-csv'))
 getLinks(baseURL)
   .then(() => getLinks(baseURL + 'regime_tributario/'))
   .then(async (links) => {
-    for (const link of links) {
+    const filesToDownload = await askFilesToDownload(links);
+    for (const link of filesToDownload) {
       const fileName = link.split('/').pop();
       const downloadPath = `./arquivos-zip/${fileName}`;
       console.log(`Starting download of ${fileName}`);
@@ -153,5 +198,7 @@ getLinks(baseURL)
     }
   })
   .then(() => console.log('All files downloaded and extracted successfully.'))
+  .then(() => addCSVExtension('./arquivos-csv'))
+  .then(() => console.log('All files downloaded, extracted and renamed successfully.'))
   .then(() => connectionDB())
   .catch((err) => console.log(err));
