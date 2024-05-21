@@ -2,3 +2,4 @@ node_modules
 arquivos-*
 *.zip
 *.csv
+*.log

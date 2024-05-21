@@ -4,6 +4,8 @@ const downloadFile = require('./services/DownloadFile');
 const { initDirs, unzipFile, addCSVExtension } = require('./services/UnzipFiles');
 const { getFileNames } = require('./services/MapFiles');
 const connectionDB = require('./services/ConnectionDb');
+const importCsvToTable = require('./services/InsertData');
+const logger = require('./services/Logger');
 
 const baseURL = 'https://dados.rfb.gov.br/CNPJ/';
 
@@ -18,21 +20,24 @@ getLinks(baseURL)
       const fileName = link.split('/').pop();
       const downloadPath = `./arquivos-zip/${fileName}`;
 
-      console.log(`Starting download of ${fileName}`);
+      logger.info(`Starting download of ${fileName}`);
       await downloadFile(link, downloadPath);
-      console.log(`Finished download of ${fileName}`);
+      logger.info(`Finished download of ${fileName}`);
 
-      console.log(`Starting extraction of ${fileName}`);
+      logger.info(`Starting extraction of ${fileName}`);
       await unzipFile(downloadPath, './arquivos-csv');
-      console.log(`Finished extraction of ${fileName}`);
+      logger.info(`Finished extraction of ${fileName}`);
     }
   })
-  .then(() => console.log('All files downloaded and extracted successfully.'))
+  .then(() => logger.info('All files downloaded and extracted successfully.'))
   .then(() => addCSVExtension('./arquivos-csv'))
-  .then(() => console.log('All files downloaded, extracted and renamed successfully.'))
+  .then(() => logger.info('All files downloaded, extracted and renamed successfully.'))
+  .then(() => connectionDB())
   .then(() => {
     const fileNames = getFileNames('./arquivos-csv');
-    console.log(fileNames);
+    logger.info(fileNames);
+    Object.keys(fileNames).forEach((fileName) => {
+      importCsvToTable(fileName, fileNames);
+    });
   })
-  .then(() => connectionDB())
-  .catch((err) => console.log(err));
+  .catch((err) => logger.info(err));
