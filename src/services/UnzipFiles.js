@@ -2,7 +2,6 @@ const path = require('path');
 const fs = require('fs');
 const extract = require('extract-zip');
 
-
 // Cria os diretórios necessários antes de iniciar o processo de download e extração
 function initDirs() {
   if (!fs.existsSync('./arquivos-zip'))
@@ -29,7 +28,7 @@ async function unzipFile(inputPath, outputPath) {
 
     // Verifica se o arquivo já existe e o exclui antes de extrair novamente
     const files = fs.readdirSync(absoluteOutputPath);
-    files.forEach(file => {
+    files.forEach((file) => {
       if (file === path.basename(inputPath, '.csv')) {
         fs.unlinkSync(path.join(absoluteOutputPath, file));
       }

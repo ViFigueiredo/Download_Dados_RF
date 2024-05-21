@@ -1,13 +1,17 @@
-const getLinks = require('./services/GetLinks')
-const askFilesToDownload = require('./services/TerminalQuestions')
-const downloadFile = require('./services/DownloadFile')
-const { initDirs, unzipFile, addCSVExtension } = require('./services/UnzipFiles')
-const getFileNames = require('./services/MapFiles')
-const connectionDB = require('./services/ConnectionDb')
+const getLinks = require('./services/GetLinks');
+const askFilesToDownload = require('./services/TerminalQuestions');
+const downloadFile = require('./services/DownloadFile');
+const {
+  initDirs,
+  unzipFile,
+  addCSVExtension,
+} = require('./services/UnzipFiles');
+const getFileNames = require('./services/MapFiles');
+const connectionDB = require('./services/ConnectionDb');
 
 const baseURL = 'https://dados.rfb.gov.br/CNPJ/';
 
-initDirs()
+initDirs();
 
 // Inicia o processo de obtenção de links, download e extração
 getLinks(baseURL)
@@ -27,7 +31,9 @@ getLinks(baseURL)
   })
   .then(() => console.log('All files downloaded and extracted successfully.'))
   .then(() => addCSVExtension('./arquivos-csv'))
-  .then(() => console.log('All files downloaded, extracted and renamed successfully.'))
+  .then(() =>
+    console.log('All files downloaded, extracted and renamed successfully.')
+  )
   .then(() => {
     const fileNames = getFileNames('./arquivos-csv');
     console.log(fileNames);

@@ -13,11 +13,11 @@ const knex = require('knex')({
       max: 20, // Aumente o valor máximo
       min: 3,
       acquireTimeout: 60 * 1000,
-    }
+    },
   },
   pool: {
-    propagateCreateError: false
-  }
+    propagateCreateError: false,
+  },
 });
 
 module.exports = knex;

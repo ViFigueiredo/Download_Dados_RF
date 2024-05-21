@@ -19,5 +19,5 @@ module.exports = {
         directory: './migrations/', // Diretório onde as migrações serão armazenadas
       },
     },
-  }
-}
+  },
+};
